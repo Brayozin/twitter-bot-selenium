@@ -7,6 +7,8 @@ from pyvirtualdisplay import Display
 import time
 import os
 import logging
+# import re
+from cleantext import clean
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,9 +22,9 @@ class Twitterbot:
 
     def __init__(self, email, password):
         """Constructor
- 
+
         Arguments:
-            email {string} -- registered twitter email
+            email {string} -- registered twitter email 
             password {string} -- password for the twitter account
         """
 
@@ -38,6 +40,20 @@ class Twitterbot:
             options=chrome_options
         )
 
+    def paste_content(self, el, content):
+        self.bot.execute_script(
+            f'''
+        const text = `{content}`;
+        const dataTransfer = new DataTransfer();
+        dataTransfer.setData('text', text);
+        const event = new ClipboardEvent('paste', {{
+          clipboardData: dataTransfer,
+          bubbles: true
+        }});
+        arguments[0].dispatchEvent(event)
+        ''',
+            el)
+
     def login(self):
         """
             Method for signing in the user
@@ -46,126 +62,191 @@ class Twitterbot:
 
         bot = self.bot
         # fetches the login page
-        bot.get('https://twitter.com/login')
+        bot.get('https://twitter.com/i/flow/login')
         # adjust the sleep time according to your internet speed
-        time.sleep(3)
+        time.sleep(10)
 
-        email = bot.find_element_by_xpath(
-            '//*[@id="layers"]/div/div/div/div/div/div/div[2]/div[2]/div/div/div[2]/div[2]/div/div/div/div[5]/label/div/div[2]/div/input'
-        )
+        try:
+            email = bot.find_element_by_xpath(
+                '//*[@id="layers"]/div/div/div/div/div/div/div[2]/div[2]/div/div/div[2]/div[2]/div/div/div/div[5]/label/div/div[2]/div/input'
+            )
+        except:
+            time.sleep(5)
+            email = bot.find_element_by_xpath(
+                '//*[@id="layers"]/div/div/div/div/div/div/div[2]/div[2]/div/div/div[2]/div[2]/div/div/div/div[5]/label/div/div[2]/div/input'
+            )
+
         print("email: ", email)
-        
+
+        while email is None:
+            time.sleep(1)
+            email = bot.find_element_by_xpath(
+                '//*[@id="layers"]/div/div/div/div/div/div/div[2]/div[2]/div/div/div[2]/div[2]/div/div/div/div[5]/label/div/div[2]/div/input'
+            )
+            print("email: ", email)
+
         # sends the email to the email input
         email.send_keys(self.email)
 
-        #get "next" button
+        # get "next" button
         # executes RETURN key action
         email.send_keys(Keys.RETURN)
 
-        time.sleep(3)
+        time.sleep(1)
         password = bot.find_element_by_xpath(
             '//*[@id="layers"]/div/div/div/div/div/div/div[2]/div[2]/div/div/div[2]/div[2]/div[1]/div/div/div[3]/div/label/div/div[2]/div[1]/input'
         )
         print("password: ", password)
+        while password is None:
+            time.sleep(1)
+            password = bot.find_element_by_xpath(
+                '//*[@id="layers"]/div/div/div/div/div/div/div[2]/div[2]/div/div/div[2]/div[2]/div[1]/div/div/div[3]/div/label/div/div[2]/div[1]/input'
+            )
+            print("password: ", password)
 
         # sends the password to the password input
         password.send_keys(self.password)
         # executes RETURN key action
         password.send_keys(Keys.RETURN)
 
-        time.sleep(3)
+        time.sleep(1)
 
     def post_single_tweet(self, text):
-
+        JS_ADD_TEXT_TO_INPUT = """
+        var elm = arguments[0], txt = arguments[1];
+        elm.value += txt;
+        elm.dispatchEvent(new Event('change'));
+        """
+        logger.info("post single tweet:")
+        logger.info("text: %s", text)
         bot = self.bot
         textArea = bot.find_element_by_xpath(
             '//*[@id="react-root"]/div/div/div[2]/main/div/div/div/div/div/div[3]/div/div[2]/div[1]/div/div/div/div[2]/div[1]/div/div/div/div/div/div/div/div/div/div/label/div[1]/div/div/div/div/div/div[2]/div'
         )
-        print("text: ", text)
+        # print("text: ", text)
+        logger.info("clicking text area")
         textArea.click()
-        time.sleep(3)
+        time.sleep(1)
         # sends the text to the text area
-        bot.find_element_by_xpath(
+        textarea = bot.find_element_by_xpath(
             '//*[@id="react-root"]/div/div/div[2]/main/div/div/div/div[1]/div/div[3]/div/div[2]/div[1]/div/div/div/div[2]/div[1]/div/div/div/div/div/div[2]/div/div/div/div/label/div[1]/div/div/div/div/div/div[2]/div'
-        ).send_keys(text)
+        )
+        text = text + " "
+        self.paste_content(textarea, text)
+        logger.info("textarea: ", textarea)
+        logger.info("putting text")
+        # bot.execute_script(JS_ADD_TEXT_TO_INPUT, textarea, text)
 
-        time.sleep(3)
+        time.sleep(1)
 
         # clicks the tweet button
         postButton = bot.find_element_by_xpath(
             '//*[@id="react-root"]/div/div/div[2]/main/div/div/div/div/div/div[3]/div/div[2]/div[1]/div/div/div/div[2]/div[2]/div[2]/div/div/div[2]/div[3]'
         )
-        print("post button: ", postButton)
+        # print("post button: ", postButton)
         postButton.click()
 
-        time.sleep(3)
+        time.sleep(1)
 
     def post_thread(self, thread):
+        logger.info("post thread:")
+
+        # click on post button
+
         bot = self.bot
         text = thread[0]
+        text_number = 0
         thread = thread[1:]
         # put the first tweet
         bot = self.bot
-        textArea = bot.find_element_by_xpath(
-            '//*[@id="react-root"]/div/div/div[2]/main/div/div/div/div/div/div[3]/div/div[2]/div[1]/div/div/div/div[2]/div[1]/div/div/div/div/div/div/div/div/div/div/label/div[1]/div/div/div/div/div/div[2]/div'
-        )
-        print("text: ", text)
-        textArea.click()
-        time.sleep(3)
-        # sends the text to the text area
-        bot.find_element_by_xpath(
-            '//*[@id="react-root"]/div/div/div[2]/main/div/div/div/div[1]/div/div[3]/div/div[2]/div[1]/div/div/div/div[2]/div[1]/div/div/div/div/div/div[2]/div/div/div/div/label/div[1]/div/div/div/div/div/div[2]/div'
-        ).send_keys(text + "+")
 
-        time.sleep(3)
+        postButton = bot.find_element_by_xpath(
+            '//*[@id="react-root"]/div/div/div[2]/header/div/div/div/div[1]/div[3]/a')
+        postButton.click()
+        time.sleep(1)
+
+        textArea = bot.switch_to.active_element
+        text = text + "+"
+        self.paste_content(textArea, text)
+        # text = text + "+"
+
+        # bot.execute_script(JS_ADD_TEXT_TO_INPUT, textArea, text)
+
+        time.sleep(1)
         # sends the text to the text area
-        time.sleep(3)
         # clicks the thread button
-        threadButton = bot.find_element_by_xpath('//*[@id="react-root"]/div/div/div[2]/main/div/div/div/div[1]/div/div[3]/div/div[2]/div[1]/div/div/div/div[2]/div[2]/div[2]/div/div/div[2]/a')
-        print("thread button", threadButton)
+        try:
+            threadButton = bot.find_element_by_css_selector(
+                '[aria-label="Add post"]')
+        except:
+            threadButton = bot.find_element_by_css_selector(
+                '[aria-label="Adicionar post"]')
+        # print("thread button", threadButton)
+
+        # print("thread button", threadButton)
         threadButton.click()
-        time.sleep(3)
+        time.sleep(1)
         for text in thread:
+            logger.info("text-%s: %s", text_number, text)
+            text_number += 1
             # get the text area
-            textArea = bot.find_element_by_xpath('//*[@id="layers"]/div[2]/div/div/div/div/div/div[2]/div[2]/div/div/div/div[3]/div[2]/div[2]/div/div/div/div[1]/div[2]/div/div/div/div/div/div/div/div/div/div/div/label/div[1]/div/div/div/div/div/div[2]/div')
-            textArea.click()
-            time.sleep(3)
+            bot.switch_to.active_element.click()
+            time.sleep(1)
             # sends the text to the text area
             if text != thread[-1]:
-                textArea.send_keys(text + "+")
+                text = text + "+"
+                textArea = bot.switch_to.active_element
+                self.paste_content(textArea, text)
+                # bot.execute_script(JS_ADD_TEXT_TO_INPUT, textArea, text)
                 # clicks the thread button
-                threadButton = bot.find_element_by_xpath(
-                    '//*[@id="layers"]/div[2]/div/div/div/div/div/div[2]/div[2]/div/div/div/div[3]/div[2]/div[2]/div/div/div/div[2]/div[2]/div/div/div[2]/div[3]')
-                threadButton.click()
-                time.sleep(3)
-            else:
-                textArea.send_keys(text)
-                time.sleep(3)
-                
-        # clicks the tweet button
-        postButton = bot.find_element_by_xpath('//*[@id="layers"]/div[2]/div/div/div/div/div/div[2]/div[2]/div/div/div/div[3]/div[2]/div[2]/div/div/div/div[2]/div[2]/div/div/div[2]/div[4]')
-        postButton.click()
-        time.sleep(3)
+                time.sleep(1)
+                try:
+                    threadButton = bot.find_element_by_css_selector(
+                        '[aria-label="Add post"]')
+                except:
+                    threadButton = bot.find_element_by_css_selector(
+                        '[aria-label="Adicionar post"]')
+                # print("thread button", threadButton)
 
+                threadButton.click()
+                time.sleep(1)
+            else:
+                textArea = bot.switch_to.active_element
+                text = text + " "
+                self.paste_content(textArea, text)
+                # bot.execute_script(JS_ADD_TEXT_TO_INPUT, textArea, text)
+                time.sleep(1)
+
+        # clicks the tweet button
+        postButton = bot.find_element_by_css_selector(
+            '[data-testid="tweetButton"]')
+
+        print("post button: ", postButton)
+        postButton.click()
+        time.sleep(1)
 
     def post_tweet(self, text):
         """
         This function automatically posts the
         tweet to the twitter account
- 
+
         Arguments:
             text {string} -- text to be tweeted
         """
+        logger.info("text: %s", text)
 
         bot = self.bot
 
         # fetches the twitter homepage
         # bot.get('https://twitter.com/')
-        # time.sleep(3)
+        # time.sleep(1)
+        # remove emoji
+        # text = clean(text, no_emoji=True)
 
         # clicks the text area
-        thread = [text[start:start+277] for start in range(0, len(text), 277)]
+        thread = [text[start:start+260] for start in range(0, len(text), 260)]
         logger.info("thread: %s", thread)
+        time.sleep(1)
         if len(thread) > 1:
             self.post_thread(thread)
         else:
@@ -175,7 +256,7 @@ class Twitterbot:
         """
         This function automatically retrieves
         the tweets and then likes and retweets them
- 
+
         Arguments:
             hashtag {string} -- twitter hashtag
         """
@@ -184,11 +265,11 @@ class Twitterbot:
 
         # fetches the latest tweets with the provided hashtag
         bot.get(
-            'https://twitter.com/search?q=%23'+
+            'https://twitter.com/search?q=%23' +
             hashtag+'&src=typed_query&f=live'
         )
 
-        time.sleep(3)
+        time.sleep(1)
 
         # using set so that only unique links
         # are present and to avoid unnecessary repetition
@@ -239,7 +320,7 @@ class Twitterbot:
                 # getting detected as bot by twitter
                 time.sleep(10)
             except:
-                time.sleep(2)
+                time.sleep(1)
 
         # fetches the main homepage
         bot.get('https://twitter.com/')
